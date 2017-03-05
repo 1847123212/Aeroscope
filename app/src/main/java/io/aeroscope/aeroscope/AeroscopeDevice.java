@@ -502,7 +502,6 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
     // special Subscriber subclass that receives Aeroscope sample data packets
     // TODO: when using Notifications, does each packet cause a call to onComplete()?
     // Docs: Notification is automatically unregistered once this Observable<Observable<byte[]>> is unsubscribed.
-    // Let's try getting a Timestamped<T> wrapper
     class AsDataSubscriber extends TestSubscriber<Timestamped<byte[]>> { // TODO ****** change for production(?)
         // an instance of this class is passed to the Observable's subscribe() call,
         // which returns a Subscription object. Calling unsubscribe() on this object should unregister notifications
