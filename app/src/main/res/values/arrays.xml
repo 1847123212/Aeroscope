@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+
+    <string-array name="timePerDiv">
+        <item>500 ns</item>
+        <item>1 µs</item>
+        <item>2 µs</item>
+        <item>5 µs</item>
+        <item>10 µs</item>
+        <item>20 µs</item>
+        <item>50 µs</item>
+        <item>100 µs</item>
+        <item>200 µs</item>
+        <item>500 µs</item>
+        <item>1 ms</item>
+        <item>2 ms</item>
+        <item>5 ms</item>
+        <item>10 ms</item>
+        <item>20 ms</item>
+        <item>50 ms</item>
+        <item>100 ms</item>
+        <!-- <item>200 ms</item> TODO: not in specs; should it be? -->
+        <item>500 ms</item>
+        <item>1 s</item>
+        <item>2 s</item>
+        <item>5 s</item>
+    </string-array>
+
+    <string-array name="voltsPerDiv">
+        <item>100 mV</item>
+        <item>200 mV</item>
+        <item>500 mV</item>
+        <item>1 V</item>
+        <item>2 V</item>
+        <item>5 V</item>
+        <item>10 V</item>
+    </string-array>
+
+    <string-array name="aeroscopeCommands">
+        <item>Enter run mode</item>
+        <item>Enter stop mode</item>
+        <item>Stop and calibrate</item>
+        <item>Stop/clear cal.</item>
+        <item>Stop/get single frame</item>
+        <item>Stop/get full frame</item>
+        <item>Stop/suspend FPGA</item>
+        <item>Deep sleep</item>
+        <item>Write FPGA register</item>
+        <item>Set scope name</item>
+        <item>Send telemetry immediate</item>
+        <item>Refresh telemetry</item>
+        <item>Send cached version</item>
+        <item>Refresh version</item>
+        <item>Fetch error log</item>
+    </string-array>
+
+
+
+
+
+</resources>
