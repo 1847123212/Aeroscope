@@ -42,6 +42,7 @@ public class AeroscopeDisplay extends AppCompatActivity implements ServiceConnec
     TextView connectionState;
     TextView outputCharacteristic;
     TextView deviceBatteryStatus;
+    TextView deviceDataSamples;
     Spinner aeroscopeTimeBaseSpinner;
     Spinner aeroscopeVerticalSensSpinner;
     Spinner aeroscopeCommandSelectSpinner;
@@ -64,6 +65,7 @@ public class AeroscopeDisplay extends AppCompatActivity implements ServiceConnec
         connectionState = (TextView) findViewById(R.id.aeroscopeConnectionState);
         outputCharacteristic = (TextView) findViewById(R.id.outputChars);
         deviceBatteryStatus = (TextView) findViewById(R.id.batteryStatus);
+        deviceDataSamples = (TextView) findViewById(R.id.dataSamples);
         aeroscopeTimeBaseSpinner = (Spinner) findViewById(R.id.timebaseSpinner);
         aeroscopeVerticalSensSpinner = (Spinner) findViewById(R.id.verticalSpinner);
         aeroscopeCommandSelectSpinner = (Spinner) findViewById(R.id.aeroscopeCommands);
@@ -237,6 +239,17 @@ public class AeroscopeDisplay extends AppCompatActivity implements ServiceConnec
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(this::onOutputNotificationReceived, this::onNotificationSetupFailure);
 
+
+        //This next block handles the probe's transmission of data back to the application/user
+        selectedScope.getConnectionObservable()
+                .flatMap(rxBleConnection -> rxBleConnection.setupNotification(AeroscopeConstants.asDataCharId))
+                .doOnNext(notificationObservable -> runOnUiThread(this::notificationHasBeenSetUp))
+                .doOnError(setupThrowable -> runOnUiThread(this::notificationSetupError))  // NEW
+                .flatMap(notificationObservable -> notificationObservable)
+                .timestamp()  // NEW
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(this::onDataNotificationReceived, this::onNotificationSetupFailure);
+
     }
 
     void notificationHasBeenSetUp() {
@@ -253,6 +266,12 @@ public class AeroscopeDisplay extends AppCompatActivity implements ServiceConnec
         //Snackbar.make(findViewById(R.id.main), "Change: " + HexString.bytesToHex(outputMessage.getValue()), Snackbar.LENGTH_SHORT).show();
         Log.d(LOG_TAG, "onOutputNotificationReceived() about to call onOutputMessageReceived" );
         onOutputMessageReceived(outputMessage);
+    }
+
+    void onDataNotificationReceived(Timestamped<byte[]> outputMessage) {  // NEW Timestamped
+        //Snackbar.make(findViewById(R.id.main), "Change: " + HexString.bytesToHex(outputMessage.getValue()), Snackbar.LENGTH_SHORT).show();
+        Log.d(LOG_TAG, "onOutputNotificationReceived() about to call onOutputMessageReceived" );
+        deviceDataSamples.append(HexString.bytesToHex(outputMessage.getValue()) +  " "); //append our probe message to our textView
     }
 
     void onNotificationSetupFailure(Throwable error) { // getting "Nofication setup error null"
