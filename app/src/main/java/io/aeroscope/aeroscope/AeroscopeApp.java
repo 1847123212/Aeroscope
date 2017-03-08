@@ -117,7 +117,7 @@ if (isConnected()) {
                     .doOnNext(notificationObservable -> runOnUiThread(this::notificationHasBeenSetUp))
                     .flatMap(notificationObservable -> notificationObservable)
                     .observeOn(AndroidSchedulers.mainThread())
-                    .subscribe(this::onNotificationReceived, this::onNotificationSetupFailure);
+                    .subscribe(this::onNotificationReceived, this::onOutputNotificationError);
         }
 
 * */
