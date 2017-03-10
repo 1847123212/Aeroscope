@@ -78,13 +78,13 @@ Stuff that lives here:
         
 */
 
-    
+
 // Must be declared public (and listed in Manifest) to be used as a Service
 public class AeroscopeBluetoothService extends Service { // a Bound Service is an implementation of abstract Service class
-    
+
     // Constants, Options
     private final static String LOG_TAG = "AeroscopeBluetoothServc"; // tag for logging (23 chars max)
-    
+
     // RxAndroidBle static variables
     static RxBleClient asBleClient; // only one (set by this onCreate()); reference as AeroscopeBluetoothService.asBleClient
     static Vector<RxBleDevice> rxBleDeviceVector = new Vector<>();    // can hold multiple devices discovered during scan
@@ -93,23 +93,23 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
     static AtomicBoolean errorScanning = new AtomicBoolean( false );  // indicates if last scan got an error
     static Subscription scanSubscription;     // for scanning for BLE devices
     static AsScanSubscriber<RxBleScanResult> scanSubscriber;
-    
+
     // I THINK onCreate takes the place of a constructor
-    
+
     @Override
     public void onCreate( ) {
         super.onCreate( ); // apparently a Bound Service's onCreate() isn't passed Bundle savedInstanceState
         // Try doing this here and not in App onCreate() Seems to work
         asBleClient = RxBleClient.create( /*context*/ this ); // we're only supposed to have 1 instance of Client
         RxBleClient.setLogLevel( RxBleLog.DEBUG );
-        Log.i( LOG_TAG, "onCreate() created client and set log level."); //
+        Log.d( LOG_TAG, "onCreate() created client and set RxBleLog level."); //
         RxBleLog.d( "RxBleLog: ABS onCreate(): Created client and set log level.", (Object)null ); // works; seems to arrive here without incident
         //TODO: following line probably not wanted with the Service binding, right? (for Activities, yes, but prob. not for AeroscopeDevice)
         AeroscopeDevice.setServiceRef( this ); // pass ref to Service instance to AeroscopeDevice class // TODO: does this work? Seems to
     }
-    
+
     //TODO: do we need onPause(), onResume()?
-    
+
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -117,14 +117,14 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
         // This is the only possibly active subscription in the Service:
         if( !scanSubscription.isUnsubscribed() ) scanSubscription.unsubscribe(); // don't know if the test is necessary
     }
-    
-    
-    
+
+
+
 /*----------------------------------- SERVICE BINDING STUFF --------------------------------------*/
-    
+
     // Binder given to clients for service--returns this instance of the Service class
     private final IBinder asBleBinder = new LocalBinder();
-    
+
     // Class for binding Service
     public class LocalBinder extends Binder {
         AeroscopeBluetoothService getService() {
@@ -134,7 +134,7 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
             return AeroscopeBluetoothService.this; // include class name; otherwise "this" == LocalBinder?
         } // getService
     } // LocalBinder
-    
+
     @Override // Service must implement this & return an IBinder
     public IBinder onBind(Intent intent) {
         Log.d( LOG_TAG, "Entering onBind()" ); // [0080]
@@ -142,10 +142,10 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
         // e.g., String macAddress = intent.getStringExtra( "MAC_Address_Extra" );
         return asBleBinder; // can call the returned instance with .getService
     }
-    
+
     @Override // do we want/need this?
     public void onRebind( Intent intent ) { Log.d( LOG_TAG, "onRebind() entered" ); } // TODO: anything here?
-    
+
     // Of possible use:
     @Override
     public boolean onUnbind(Intent intent) {
@@ -157,12 +157,12 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
         // when you call bindService() from the Activity.
         return true;
     }
-    
+
 /*----------------------------------- /SERVICE BINDING STUFF -------------------------------------*/
 
-    
+
 /*------------------------------------- BLUETOOTH UTILITIES --------------------------------------*/
-    
+
     // get the client
     // this is how sample does it; necessary?
     //    public static RxBleClient getRxBleClient(Context context) {
@@ -173,13 +173,13 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
         return asBleClient;
     } ///TODO: make sure this works
     // note static because there is only one client even if we have multiple devices
-    
+
     public void addRxBleScanResult( RxBleScanResult scanResult ) {
         RxBleDevice device = scanResult.getBleDevice();
         Log.d( LOG_TAG, "addRxBleScanResult about to call addRxBleDevice with device " + device.toString() );
         addRxBleDevice( device );
     }
-    
+
     // Add an RxBleDevice to the Vector (returns true if it was not already present)
     // note may not really need this separate vector
     public boolean addRxBleDevice( RxBleDevice device ) {
@@ -190,7 +190,7 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
             return rxBleDeviceVector.add( device ); // true
         } else return false; // device was already in vector
     }
-    
+
     // Add an Aeroscope device to the Vector (returns true if it was not already present)
     // static because there's just 1 vector
     public boolean addAeroscopeDevice( AeroscopeDevice asDevice ) {
@@ -200,7 +200,7 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
             return asDeviceVector.add( asDevice ); // true
         } else return false; // device was already in vector
     }
-    
+
     // method called when user hits Scan button
     // populates vectors of RxBleDevice & AeroscopeDevice found
     // note this is an "infinite" Observable (made finite by the .take() calls)
@@ -221,49 +221,49 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
                 .take( SCAN_TIME, TimeUnit.SECONDS )  // limit the length of the scan (initially 60L--these values are now in AeroscopeConstants)
                 .doOnNext( this::addRxBleScanResult ) // put a found device in the Vectors
                 .subscribe( scanSubscriber ); // should call scanSubscriber.onStart() (which sets nowScanning true)
-        
+
         Log.d( LOG_TAG, "Exiting scanForAeroscopes() after subscribing" ); // reached here during initial scan [150]
     }
-    
+
     // In the sample app, unsubscribe() is only called when the user toggles the Scan button and in the onPause() method
     // Here, it appears that the .take() calls will implicitly unsubscribe.
-    
+
     // method to stop a device scan
     public synchronized void stopScanning() {
         scanSubscription.unsubscribe(); // may be NOP if .take() has already implicitly unsubscribed (above)
         nowScanning.set( false );
         Log.d( LOG_TAG, "stopScanning() has run" );
     }
-    
+
     // methods to test if scan of BLE devices is active or got an error
     public boolean deviceScanIsActive()     { return nowScanning.get(); }
     public boolean lastDeviceScanGotError() { return errorScanning.get(); }
-    
+
     // method to see how many devices have been found (since last scan was started)
     public int getFoundDeviceCount() {
         return rxBleDeviceVector.size();
     }
-    
+
     // method to see how many Aeroscopes have been found (since last scan was started)
     public int getFoundAeroscopeCount() {
         return asDeviceVector.size();
     }
-    
+
     public Vector<RxBleDevice> getFoundDeviceVector() {
         return rxBleDeviceVector;
     }
-    
+
     public Vector<AeroscopeDevice> getFoundAeroscopeVector() {
         return asDeviceVector;
     }
-    
-    
-    
+
+
+
 /*------------------------------------ /BLUETOOTH UTILITIES --------------------------------------*/
 
 
 /*----------------------------------------- SUBSCRIBERS ------------------------------------------*/
-    
+
     // A special Subscriber for testing the Scan operation
     // maintains the "nowScanning" state boolean, accessed by deviceScanIsActive()
     // and "errorScanning", accessed by lastDeviceScanGotError()
@@ -287,7 +287,7 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
             errorScanning.set( false );   // set the "scan error" flag (probably redundant, but...)
             this.unsubscribe();           // NEW: once the scan is done, shut it off(?) TODO? (actually, the .take() calls implicitly unsubscribe)
             Log.d( LOG_TAG, "AsScanSubscriber onCompleted() called; unsubscribed" ); // [0170]
-        
+
             // Broadcast the results (new)
             Intent scanIntent = new Intent( "scanResults" );
             scanIntent.putExtra( "io.aeroscope.aeroscope.DeviceVector", asDeviceVector ); // name must include package; Vector implements Serializable
@@ -295,7 +295,7 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
             Log.d( LOG_TAG, "AsScanSubscriber onCompleted() broadcast asDeviceVector" ); //
         }
         @Override // from Class Subscriber: invoked when the Subscriber and Observable have been connected
-                  // but the Observable has not yet begun to emit items
+        // but the Observable has not yet begun to emit items
         public synchronized void onStart( ) {
             super.onStart();              // may be necessary, not sure
             nowScanning.set( true );      // set "scan active" flag (synchronized)
@@ -305,8 +305,8 @@ public class AeroscopeBluetoothService extends Service { // a Bound Service is a
     }
     
 /*----------------------------------------- /SUBSCRIBERS -----------------------------------------*/
-    
-    
+
+
     // Handling an error in the initial scan for Bluetooth devices (e.g., Bluetooth not enabled) TODO: test (worked once, I think)
     // Called by the onError() method of AsScanSubscriber
     static void handleScanError( Throwable scanError, Context context ) {

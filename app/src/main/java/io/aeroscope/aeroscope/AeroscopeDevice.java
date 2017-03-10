@@ -78,50 +78,50 @@ Dictionary
 */
 
 public class AeroscopeDevice /* implements Channel */ implements Serializable {
-    
+
     private final static String LOG_TAG = "AeroscopeDevice        "; // tag for logging (23 chars max)
-    
+
     private static AeroscopeBluetoothService asBleServiceRef; // ref to the Service class instance, passed by constructor (TODO: or not)
-    
+
     // instance variables
     RxBleDevice bleDevice;                          // the Bluetooth hardware
     volatile RxBleConnection bleConnection;         // when this becomes non-null, we have connection (?)
     private volatile RxBleConnection.RxBleConnectionState connectionState; // or when this becomes CONNECTED (better?) (updated by Conn State Subs)
-    
+
     // Subscription variables for connection, connection state, data, I/O, state
     private AsConnSubscriber connSubscriber;        // connection Subscriber for BLE connection to Aeroscope
     private Subscription connSubscription;                  // connection Subscription
-    
+
     private AsStateChangeSubscriber stateChangeSubscriber;   // connection state change Subscriber to monitor state of BLE connection
     private Subscription stateChangeSubscription; // connection state change Subscription
-    
+
     private AsDataSubscriber dataSubscriber;        // Data Characteristic Subscriber for frame data (read/notify)
     private Subscription dataSubscription;          // Data Characteristic Subscription
-    
+
     private AsOutputSubscriber outputSubscriber;    // Output Characteristic Subscriber for responses to commands, etc. (read/notify)
     private Subscription outputSubscription;        // Output Characteristic Subscription
-    
+
     private AsOutNotificationSubscriber outNotifSubscriber;
     private Subscription outNotifSubscription;
-    
+
     private AsInputSubscriber inputSubscriber;      // Input Characteristic Subscriber to send commands (read/write)
     private Subscription inputSubscription;         // Input Characteristic Subscription
-    
+
     private AsStateSubscriber stateSubscriber;      // State Characteristic Subscriber to access FPGA (write only)
     private Subscription stateSubscription;         // State Characteristic Subscription
-    
+
     private CompositeSubscription allSubscriptions;
-    
+
     private DataOps asDataOps;                      // reference to the DataOps class
-    
-    
+
+
     Queue<Timestamped<byte[]>> dataQueue = new ConcurrentLinkedQueue<>( );   // queue for receiving timestamped Aeroscope data packets
     // Note it's thread safe
     Queue<DataOps.DataFrame> frameQueue = new ConcurrentLinkedQueue<>( ); // assembled frames from Aeroscope
-    
+
     Queue<byte[]> outputQueue = new ConcurrentLinkedQueue<>( ); // queue for receiving Aeroscope Output Characteristic messages
     Queue<Timestamped<byte[]>> outNotifQueue = new ConcurrentLinkedQueue<>( ); // queue for receiving timestamped Output messages
-    
+
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // New (maybe): vector of commands sent/responses received (for test etc.)
     // highest index is most recent message
@@ -142,10 +142,10 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
         Log.d( LOG_TAG, "Updated I/O history with " + (trueIfCommand? "command to" : "response from") + " Aeroscope" );
     }
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    
-    
+
+
     AtomicBoolean writeCommandInProgress; // currently sending/executing a command on Aeroscope Input Characteristic TODO: need?
-    
+
     // Hardware Parameters
     volatile short batteryVoltage, temperature, acceleration; // added volatile
     byte hardwareId, fpgaRev, firmwareRev;
@@ -156,13 +156,13 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
     volatile boolean buttonDown;
     short buttonDownTime;      // -1 if unknown
     long lastOutputTimestamp;  // ms value from last Output message timestamp
-    
+
     byte[] fpgaRegisterBlock;  // the first 20 8-bit registers
-    
+
     int batteryState;          // CRITICAL, LOW, MEDIUM, or FULL (0, 1, 2, 3)
     boolean chargerConnected;  // bit 15 of battery register
     boolean chargingNow;       // bit 14
-    
+
 /*
     In the MainActivity, the user presses the Scan button
     This calls asBleServiceRef.scanForAeroscopes(), which scans for up to N Aeroscopes or T seconds. (new)
@@ -180,8 +180,8 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             initializes a new AsOutputSubscriber outputSubscriber
             sets asStateChangeSubscription and a new AsStateChangeSubscriber to keep connectionState updated
 */
-    
-    
+
+
     // constructor (may eventually want to pass in a data Object of Aeroscope initialization parameters)
     // TODO: see if we can eliminate the service parameter (replaced by Service's onCreate calling our setServiceRef)
     public AeroscopeDevice ( RxBleDevice device, AeroscopeBluetoothService service ) {
@@ -190,45 +190,47 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
         bleDevice = device;
         connSubscriber = new AsConnSubscriber( );
         stateChangeSubscriber = new AsStateChangeSubscriber( device.getName() );
-        connSubscription = CONNECT_ON_DISCOVERY? this.connectBle() : null;  // subscribes to connSubscriber
+        //connSubscription = CONNECT_ON_DISCOVERY? this.connectBle() : null;  // subscribes to connSubscriber REMOVED in favor of AeroscopeDisplay
         dataSubscriber = new AsDataSubscriber();
         outputSubscriber = new AsOutputSubscriber( device.getName() );   // added device name TODO: may eliminate in favor of Notifications
         outNotifSubscriber = new AsOutNotificationSubscriber( device.getName() );
         inputSubscriber = new AsInputSubscriber( device.getName() );     // added device name
-    
+
         fpgaRegisterBlock = new byte[20]; // TODO: copy initial values into this array?
-    
+
         //allSubscriptions = new CompositeSubscription( ); // TODO: check, test
-    
+
+/* Handled in AeroscopeDisplay
         stateChangeSubscription = bleDevice.observeConnectionStateChanges() // (don't know why we'd ever unsubscribe)
                 .subscribeOn( Schedulers.io( ) ) // try a separate I/O thread (should be pretty rare events, though)
                 .observeOn( AndroidSchedulers.mainThread() ) // seems to be necessary to affect UI
                 .subscribe( stateChangeSubscriber ); // just updates the connectionState variable
         //allSubscriptions.add( stateChangeSubscription ); // add to the composite TODO: right?
-        
+*/
+
         writeCommandInProgress = new AtomicBoolean( false );
-        
+
         // May be better to add them at the time of subscribing
         // allSubscriptions.addAll( connSubscription, stateChangeSubscription, dataSubscription,
         //        outputSubscription, outNotifSubscription, inputSubscription, stateSubscription );
-        
+
         asDataOps = new DataOps();  // instance of the Data Operations class
-        
-        
+
+
         Log.d( LOG_TAG, "Finished constructor with device " + device.getName() );
     }
-    
-    
+
+
     @Override // for display in ArrayAdapter view
     public String toString() { return bleDevice.getName() + " (" + bleDevice.getMacAddress() + ")"; }
-    
-    
+
+
     // Initialize ref to AeroscopeBluetoothService instance (called by its onCreate())
     public static void setServiceRef( AeroscopeBluetoothService myService ) {
         asBleServiceRef = myService;
     }
-    
-    
+
+
     // Connect to this device via BLE
     // Unsubscribe the returned Subscription to disconnect
     Subscription connectBle() {
@@ -236,33 +238,33 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                 .establishConnection( asBleServiceRef, NO_AUTO_CONNECT ) // returns Observable<RxBleConnection>
                 .subscribe( connSubscriber );
     }
-    
+
     // return the Connection State
     RxBleConnection.RxBleConnectionState getConnectionState() { return connectionState; }
-    
-    
+
+
     private boolean isConnected() {
         return bleDevice.getConnectionState() == RxBleConnection.RxBleConnectionState.CONNECTED;
     }
-    
-    
+
+
     // method to return an Observable<connection> if we're connected, or reconnect if necessary
     // TODO: BEWARE race conditions!
     Observable<RxBleConnection> getConnectionObservable() {
         if( isConnected() ) return Observable.just( bleConnection );
         else return bleDevice.establishConnection( asBleServiceRef, NO_AUTO_CONNECT ); // TODO: AUTO or NO?
     }
-    
-    
+
+
     // Rethinking some things
-    
+
     // from the docs on Observable<RxBleConnection> establishConnection(Context context, boolean autoConnect);
     //      --when Observable is unsubscribed, connection is automatically disconnected (and released)
     //      --when the device or system interrupts the connection,
     //          --the Observable emits BleDisconnectedException or BleGattException
     //          --the Observable unsubscribes
     // at least I think that's what it says
-    
+
     // This Observable does nothing until at least one Subscriber hops on. When the last one is gone, it unsubscribes.
 //    public Observable<RxBleConnection> bleConnectObs = bleDevice
 //            .establishConnection( asBleServiceRef, NO_AUTO_CONNECT ) // (context, autoconnect)
@@ -272,7 +274,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
     // Presumably if several different classes of Subscribers are subscribed, they'll all get notified
     // of any error or completion. How to handle?
     //
-    
+
     // Idea: instead of polling a queue of assembled frames, transform the packet Observable into a Frame Observable.
     // Then the UI just has to respond to onNext( Frame ).
 //    Observable<DataFrame> frameObservable = Observable
@@ -298,7 +300,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
 //            })
 //            .subscribeOn( Schedulers.io() ) // run .create()'s callback on a separate nonblocking thread
 //            ;
-    
+
 /*    // Better idea (StackOverflow)?
     Observable<DataFrame> packets2Frames =
             getConnectionObservable()
@@ -313,7 +315,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                     .timestamp()
             .scan(  )
             ; // wrap each packet in a Timestamped object
-    
+
     static class FrameAssembler {
         DataFrame frameUnderConstruction;
         public byte[] receivePacket( byte[] receivedPacket ) {
@@ -325,15 +327,15 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             }
         }
     }*/
-    
 
 
 
-    
-    
+
+
+
 /*--------------------------------INPUT OPERATIONS (TO AEROSCOPE)---------------------------------*/
-    
-    
+
+
     // New effort: write a command to the Aeroscope's Input Characteristic
     // Change: timestamp the sent commands as they are echoed through the Observable TODO: good idea?
     public void writeCommand( byte[] commandBytes ) {
@@ -345,23 +347,23 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe( inputSubscriber );  // apparently just emits whatever was sent to the Aeroscope
     }
-    
-    
+
+
     // Write a value to an FPGA register (using writeCommand)
     public void writeFpgaRegister( int address, int data ) { // int allows casting values >127 to positive numbers
         byte addressByte, dataByte;
         if( address >= 0 && address < 256 ) addressByte = (byte) address;
-            else throw new IllegalArgumentException( "writeFpgaRegister address value out of range: " + address );
+        else throw new IllegalArgumentException( "writeFpgaRegister address value out of range: " + address );
         if( data >= 0 && data < 256 ) dataByte = (byte) data;
-            else throw new IllegalArgumentException( "writeFpgaRegister data value out of range: " + data );
+        else throw new IllegalArgumentException( "writeFpgaRegister data value out of range: " + data );
         byte[] fpgaCommand = new byte[3];
         fpgaCommand[0] = WRITE_FPGA_REG[0];
         fpgaCommand[1] = addressByte;
         fpgaCommand[2] = dataByte;
         writeCommand( fpgaCommand );
     }
-    
-    
+
+
     // Write the block of 20 FPGA registers to the State Characteristic
     public void writeState( byte[] stateBytes ) {
         stateSubscription = getConnectionObservable()
@@ -371,12 +373,12 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                 .subscribe( stateSubscriber );
         //allSubscriptions.add( stateSubscription ); // TODO: right?
     }
-    
+
 /*---------------------------------------/INPUT OPERATIONS----------------------------------------*/
 
-    
+
 /*-------------------------------OUTPUT OPERATIONS (FROM AEROSCOPE)-------------------------------*/
-    
+
     // set up a single value? subscription to the Aeroscope's Output messages TODO: is this right? Should we get rid of?
     public void subscribeToOutput() { // messages from Aeroscope's Output Characteristic (which also supports notifications)
         outputSubscription = getConnectionObservable()
@@ -387,7 +389,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                 .subscribe( outputSubscriber ); // received messages are added to (confusingly) outputQueue
         //allSubscriptions.add( outputSubscription ); // TODO: right?
     }
-    
+
     // set up subscription to Notifications on the Aeroscope's Output characteristic (with timestamping)
     public void enableOutputNotification() { // from Output characteristic
         outNotifSubscription = getConnectionObservable()
@@ -405,12 +407,12 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                 .subscribe( outNotifSubscriber ); // received, timestamped messages--add to outNotifQueue
         //allSubscriptions.add( outNotifSubscription ); // TODO: right?
     }
-    
+
 /*---------------------------------------/OUTPUT OPERATIONS---------------------------------------*/
-    
-    
+
+
 /*-----------------------------SAMPLE DATA OPERATIONS (FROM AEROSCOPE)----------------------------*/
-    
+
     // set up a subscription to the Aeroscope's Data packets (via Notification)
     public void enableDataNotification() { // from Aeroscope's Data Characteristic
         dataSubscription = getConnectionObservable()
@@ -426,7 +428,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                 .subscribe( dataSubscriber ); // received messages are parsed & assembled into frames and queued
         //allSubscriptions.add( dataSubscription ); // TODO: right?
     }
-    
+
     // turn off Data notifications
     public void disableDataNotification() {
         if( dataSubscription != null ) {
@@ -435,7 +437,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             Log.d( LOG_TAG, "Canceled notification for Data frames from device: " + bleDevice.getName() );
         }
     }
-    
+
     // check if Data notifications are active
     public boolean dataNotificationIsEnabled() {
         boolean enabled = !( dataSubscription.isUnsubscribed() || dataSubscription == null );
@@ -443,7 +445,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                 + " enabled for " + bleDevice.getName() );
         return enabled;
     }
-    
+
     // Returns an Observable that emits DataFrames from the scope
     // Use: something like:
     // Subscription frameSubscription = getFrameObservable()
@@ -455,9 +457,9 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                 .flatMap( rxBleConnection -> rxBleConnection.setupNotification( asDataCharId ) )
                 .subscribeOn( Schedulers.io() ) // try an I/O thread (doesn't affect UI so shouldn't need to observe on UI thread)
                 .doOnNext( notificationObservable -> {
-                        // Notification has been set up
-                        Log.d( LOG_TAG, "Set up notification for Data frames from device: " + this.bleDevice.getName() );
-                    })
+                    // Notification has been set up
+                    Log.d( LOG_TAG, "Set up notification for Data frames from device: " + this.bleDevice.getName() );
+                })
                 .flatMap( notificationObservable -> notificationObservable ) // Unwrap the Observable into Data events
                 .timestamp() // wrap each packet in a Timestamped object
                 // not sure if casting null is of any use below (message says it's redundant)
@@ -468,10 +470,10 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
         return frameObs;
     }
 
-    
+
 /*------------------------------------/SAMPLE DATA OPERATIONS-------------------------------------*/
-    
-    
+
+
     // special Subscriber for connection to device
     // Note that connection is broken when Observable is unsubscribed, and vice versa
     class AsConnSubscriber extends TestSubscriber<RxBleConnection> { // ****** change to normal Subscriber when done
@@ -497,8 +499,8 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             // maybe a Toast?
         }
     }
-    
-    
+
+
     // special Subscriber subclass that receives Aeroscope sample data packets
     // TODO: when using Notifications, does each packet cause a call to onComplete()?
     // Docs: Notification is automatically unregistered once this Observable<Observable<byte[]>> is unsubscribed.
@@ -527,9 +529,9 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             throw new RuntimeException( "AsDataSubscriber error in data feed from Aeroscope: " + e.getMessage(), e );
         }
     }
-    
-    
-    
+
+
+
     // special Subscriber subclass that receives connection state changes
     // added a string for device name
     class AsStateChangeSubscriber extends TestSubscriber<RxBleConnection.RxBleConnectionState> {
@@ -540,7 +542,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             Log.d( LOG_TAG, "Finished AsStateChangeSubscriber constructor for device " + deviceName );
         }
         @Override // from Class Subscriber: invoked when the Subscriber and Observable have been connected
-                  // but the Observable has not yet begun to emit items
+        // but the Observable has not yet begun to emit items
         public void onStart( ) {
             Log.d( LOG_TAG, "AsStateChangeSubscriber onStart() called for device " + deviceName );
         }
@@ -564,8 +566,8 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             throw new RuntimeException( "Error in Connection State feed from Aeroscope " + deviceName + ": " + e.getMessage(), e );
         }
     }
-    
-    
+
+
     // special Subscriber subclass that receives data from Aeroscope's Output Characteristic
     // the way this is set up, it appears that this is a single-item Observable
     // Change: the new type of emission is Timestamped<byte[]>
@@ -577,7 +579,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             Log.d( LOG_TAG, "Finished AsOutputSubscriber constructor for " + deviceName );
         }
         @Override // from Class Subscriber: invoked when the Subscriber and Observable have been connected
-                  // but the Observable has not yet begun to emit items
+        // but the Observable has not yet begun to emit items
         public void onStart( ) {
             // super.onStart();  // apparently not necessary to call super in a Subscriber
             Log.d( LOG_TAG, "AsOutputSubscriber onStart() called" );
@@ -599,8 +601,8 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             throw new RuntimeException( "Error in output subscription from Aeroscope " + deviceName + ": " + e.getMessage(), e );
         }
     }
-    
-    
+
+
     // special Subscriber subclass that receives timestamped Notifications from Aeroscope's Output Characteristic
     // TODO: do we want to timestamp these?
     class AsOutNotificationSubscriber extends TestSubscriber<Timestamped<byte[]>> {
@@ -635,8 +637,8 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                     + deviceName + ": " + e.getMessage(), e );
         }
     }
-    
-    
+
+
     // special Subscriber subclass that sends data to Aeroscope's Input Characteristic
     // Change: the new type of emission is Timestamped<byte[]>
     class AsInputSubscriber extends TestSubscriber<Timestamped<byte[]>> { // changed from <byte[]>
@@ -670,8 +672,8 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             throw new RuntimeException( "Error in input subscription to Aeroscope: " + e.getMessage(), e );
         }
     }
-    
-    
+
+
     // special Subscriber subclass that sends data to Aeroscope's State Characteristic (FPGA registers 0-19)
     class AsStateSubscriber extends TestSubscriber<byte[]> {
         String deviceName;
@@ -703,25 +705,25 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             throw new RuntimeException( "Error in State subscription to Aeroscope: " + e.getMessage(), e );
         }
     }
-    
-    
-    
+
+
+
     //HELPER METHODS ETC.
-    
+
     // Stuff for the Main Loop (processing queues, etc.)
-    
-    
-    
+
+
+
     // Main loop(?) TODO: Need?
     private void run() {
         while( true ) {
             if( outputQueue.peek( ) != null )
                 //processOutput( ); // if anything in the Output queue from the Aeroscope, handle it.
-            if( frameQueue.peek( ) != null );
-                //processFrame( ); // there is a waiting Data frame at head of queue
+                if( frameQueue.peek( ) != null );
+            //processFrame( ); // there is a waiting Data frame at head of queue
         }
     }
-    
+
     // Convert battery voltage to one of the 4 conditions (see AeroscopeConstants)
     int getBatteryCondition() {
         //TODO RJL: implement
@@ -729,7 +731,7 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
         chargingNow = (batteryVoltage & 0x4000) != 0;
         return batteryVoltage & 0x00FF; // for now, the raw voltage TODO: later: the battery condition pseudo-enum
     }
-    
+
     // An Observable that fires at intervals of 5 seconds to update battery condition
     // Subscribe to it to get onNext() updates of battery condition
     // Don't forget to unsubscribe in onDestroy
@@ -740,20 +742,20 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
             .observeOn( AndroidSchedulers.mainThread() )
             //.doOnNext( battCond -> onUpdateBattCond( battCond ) )
             ;
-    
-    
+
+
     void handleDataPacket( Timestamped<byte[]> timestampedBytes ) {
         // probably don't need this with new Observable<DataFrame>? (referenced by AsDataSubscriber)
     }
-    
-    
+
+
     // Got a message (or notification) from Aeroscope Output characteristic
     void handleOutputFromAeroscope( Timestamped<byte[]> outputMessage ) {
-        
+
         lastOutputTimestamp = outputMessage.getTimestampMillis();
         ByteBuffer dataBuf = ByteBuffer.wrap( outputMessage.getValue() ); // default byte order is Big-Endian
         byte preamble1, preamble2, preamble3;
-        
+
         preamble1 = dataBuf.get();
         switch ( preamble1 ) {
             case TELEMETRY:  // "T" next bytes are shorts
@@ -814,47 +816,44 @@ public class AeroscopeDevice /* implements Channel */ implements Serializable {
                 }
                 debugMsg = sb.toString(); // global variable TODO: should we queue it?
                 break;
-            case BUTTON:  // "B" TODO: needs rework since we think all messages are 20 bytes, null-padded
-                preamble2 = dataBuf.get();  // followed by D and EOM, DT and time H/L, or UT and time H/L
-                switch( preamble2 ) {
-                    case DOWN: // can be end of message, or followed by T + time value
-                        buttonDown = true; // but it could be a nonsense message, perhaps
-                        if( dataBuf.position() >= dataBuf.limit() ) { // we're at end of the message TODO: probably not (all packets 20 bytes?)
-                            buttonDownTime = (short) -1;     // down time unknown
-                        } else { // there is more message: 'T' + time value (to be implemented)
-                            preamble3 = dataBuf.get(); // should be a 'T'
-                            if( (preamble3 == TIME_DOWN) && (dataBuf.limit() - dataBuf.position() >= 2) ) { // make sure time data in buffer
+            case BUTTON:  // "B"
+                preamble2 = dataBuf.get();  // followed by D, DT and time H/L, or UT and time H/L (latter 2 are unimplemented, we think)
+                switch( preamble2 ) {  // next char must be D or U, else error
+                    case DOWN: // "D" can be end of message, or followed by T + time value
+                        preamble3 = dataBuf.get();  // should be NULL or T
+                        switch( preamble3 ) {
+                            case NULL: // was a simple "BD" message
+                                buttonDown = true;
+                                buttonDownTime = -1;  // TODO: maybe revisit this
+                                break;
+                            case TIME_DOWN:  // 'T'
+                                buttonDown = true;
                                 buttonDownTime = dataBuf.getShort();
-                            } else { // appears to be badly-formatted message
+                                break;
+                            default:
+                                buttonDown = false;  // bad message format
                                 Log.d( LOG_TAG, "Bad Button Down message format: BD" + (char) preamble3 );
-                            }
-                        }
-                        break;
+                        } // switch on preamble3
+                        break;  // done with case DOWN
                     case UP: // button up: should be followed by 'T' with down time (to be implemented)
-                        buttonDown = false;
-                        preamble3 = dataBuf.get(); // should be a 'T'
-                        if( (preamble3 == TIME_DOWN) && (dataBuf.limit() - dataBuf.position() >= 2) ) { // make sure time data in buffer
+                        preamble3 = dataBuf.get();  // should be T
+                        if( preamble3 == TIME_DOWN ) {  // it is
                             buttonDownTime = dataBuf.getShort();
-                        } else { // appears to be badly-formatted message
-                            Log.d( LOG_TAG, "Bad Button Down message format: BU" + (char) preamble3 );
+                            buttonDown = false;  // this was an UP message
+                            break;
+                        } else {  // appears to be badly-formatted message
+                            Log.d( LOG_TAG, "Bad Button Up message format: BU" + (char) preamble3 );
+                            break;
                         }
-                        break;
                     default: // second byte of BUTTON message was not UP or DOWN; error
                         Log.d( LOG_TAG, "Bad Button message format: B" + (char) preamble2 );
-                }
-                break;
+                } // switch on preamble2
+                break;  // done with case BUTTON
             default: // don't recognize the command
                 Log.d( LOG_TAG, "Unrecognized message received from Aeroscope Output Characteristic" + (char) preamble1 );
         } // switch on preamble1
-                        
+
     } // handleOutputFromAeroscope
-                
-                
-        
-        
-        
-    
-    
-    
-    
+
+
 } // class AeroscopeDevice

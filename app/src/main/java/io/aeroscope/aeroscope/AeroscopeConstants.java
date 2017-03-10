@@ -3,6 +3,8 @@ package io.aeroscope.aeroscope;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
+import static java.lang.Thread.MAX_PRIORITY;
+
 
 /**
  * Created on 2017-02-25.
@@ -12,14 +14,15 @@ final class AeroscopeConstants {
 
     /************************************ APPLICATION PARAMETERS **************************************/
 
-    final static long SCAN_TIME = 60L;                  // limit BLE scan to this many seconds (if used)
-    final static int MAX_AEROSCOPES = 2;                // limit BLE scan to this many scopes (if used)
-    final static boolean CONNECT_ON_DISCOVERY = false;  // should we automatically connect to discovered Aeroscopes?
-    final static long FRAMESUBSCRIBER_SLEEP_MS = 20L;   // sleep time to wait for a new Data frame TODO: eliminate?
-    final static int IO_HISTORY_LENGTH = 10;
-    final static boolean MSG_FROM_AEROSCOPE = false;    // describes origin of packets in history
-    final static boolean CMD_TO_AEROSCOPE = true;       // describes origin of packets in history
-    final static long HEARTBEAT_SECOND = 6;
+    final static long SCAN_TIME = 60L;                    // limit BLE scan to this many seconds (if used)
+    final static int MAX_AEROSCOPES = 2;                  // limit BLE scan to this many scopes (if used)
+    final static boolean CONNECT_ON_DISCOVERY = false;    // should we automatically connect to discovered Aeroscopes?
+    final static long FRAMESUBSCRIBER_SLEEP_MS = 20L;     // sleep time to wait for a new Data frame TODO: eliminate?
+    final static int IO_HISTORY_LENGTH = 10;              // how many messages to keep in history TODO: using?
+    final static boolean MSG_FROM_AEROSCOPE = false;      // describes origin of packets in history
+    final static boolean CMD_TO_AEROSCOPE = true;         // describes origin of packets in history
+    final static long HEARTBEAT_SECOND = 15;              // seconds between heartbeat ticks
+    final static int DATA_RX_PRIORITY = MAX_PRIORITY - 2; // priority for thread that receives packets & assembles frames (1-10)
 
 
 
@@ -36,10 +39,11 @@ final class AeroscopeConstants {
     private static final String BASE_UUID_HEAD = "0000"; // for 16-bit UUIDs we replace digits 4-7 of the base string with the value
     private static final String BASE_UUID_TAIL = "-0000-1000-8000-00805F9B34FB"; //
 
+    // Standard descriptor used by RxAndroidBle to enable notifications (but not used directly by our code)
     private static final String CLIENT_CHAR_CONFIG_STRING = "2902"; // GATT standard Client Characteristic Configuration UUID
     static final UUID clientCharConfigID = UUID.fromString( BASE_UUID_HEAD + CLIENT_CHAR_CONFIG_STRING + BASE_UUID_TAIL ); // for notifications/indications
     static final byte[] asDisableNotifications = { 0, 0 }; // 2 bytes of 0 = 16-bit Descriptor
-    static final byte[] asEnableNotifications  = { 1, 0 }; // 2 bytes of 0 = 16-bit Descriptor ASSUMES LITTLE-ENDIAN
+    static final byte[] asEnableNotifications  = { 1, 0 }; // ASSUMES LITTLE-ENDIAN
 
     // Aeroscope Service UUID
     private static final String AEROSCOPE_UUID_HEAD  =  "F954"; // next 4 characters are the short-form UUID
@@ -197,6 +201,8 @@ final class AeroscopeConstants {
     final static byte DOWN                 = (byte) 'D';   // second byte of Button preamble, optionally followed by
     final static byte UP                   = (byte) 'U';   // second byte of Button preamble, followed by T for time down (future?)
     final static byte TIME_DOWN            = (byte) 'T';   // third byte of Button preamble, followed by Time (H), Time (L) (future?)
+
+    final static byte NULL                 = (byte) 0;     // padding bytes for BLE packets
 
     // Packet Header Values
     static final byte PACKET_HEADER_COF      = (byte) 0;      // Continuation of Frame
